@@ -5,6 +5,8 @@ import base64
 from Crypto.Cipher import AES
 import time
 from hashlib import md5
+from Crypto.Util.Padding import pad, unpad
+from Crypto.Cipher import AES
 
 sys_file = 'sys.info'
 default_vector = 16 * '\x00'
@@ -12,10 +14,8 @@ key = 'secret'
 REG_PATH = 'HKCU\\Software\\ANN_KAT'
 set_readonly_command = 'ATTRIB +R +S {file}'
 set_reg_command = 'reg add {REG_PATH} /t REG_DWORD /d {key} /f '
-BLOCK_SIZE = 16  # Bytes
-pad = lambda s: s + (BLOCK_SIZE - len(s) % BLOCK_SIZE) * \
-                chr(BLOCK_SIZE - len(s) % BLOCK_SIZE)
-unpad = lambda s: s[:-ord(s[len(s) - 1:])]
+BLOCK_SIZE = 32  # Bytes
+from Crypto.Util.Padding import pad, unpad
 
 def check_dir(directory):
     if os.path.isdir(directory):
@@ -43,7 +43,7 @@ def main():
         os.system(set_readonly_command.format(file=filesys_full_path))
         os.system(set_reg_command.format(REG_PATH=REG_PATH, key=key))
     else:
-        text = decrypt_text(filesys_full_path, key)
+        text = decrypt_file(filesys_full_path, key)
         print(text)
 
 
@@ -55,14 +55,16 @@ def encrypt_file(filename, key):
     file_text = open(filename, 'r').read()
     encrypted_txt = encrypt_text(file_text, key)
     f = open(filename, 'wb')
-    f.write(pad(encrypted_txt))
+    f.write(encrypted_txt)
 
 
 def encrypt_text(text, key):
-    secret_key = md5(key.encode('utf-8')).hexdigest()
-    mode = AES.MODE_CBC
-    encryptor = AES.new(secret_key, mode)
-    return encryptor.encrypt(text)
+
+    key = (md5(key.encode('utf-8')).hexdigest())[:16]
+    print(key,text)
+    encryption_suite = AES.new(b'This is a key...', AES.MODE_CBC, b'This is an IV...')
+    cipher_text = encryption_suite.encrypt(pad(text.encode('utf-8'), BLOCK_SIZE))
+    return cipher_text
 
 
 def decrypt_file(filename, key):
@@ -73,9 +75,17 @@ def decrypt_file(filename, key):
 
 
 def decrypt_text(text, key):
-    decipher = AES.new(key.encode('utf-8'), AES.MODE_ECB)
-    return  unpad(decipher.decrypt(text)).decode('utf8')
-
+    print(key,text)
+    key = (md5(key.encode('utf-8')).hexdigest())[:16]
+    decryption_suite = AES.new(b'This is a key...', AES.MODE_CBC, b'This is an IV...')
+    text = bytearray(text)
+    decr = (unpad(decryption_suite.decrypt(text, BLOCK_SIZE)))
+    return  decr
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
